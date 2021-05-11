@@ -1,0 +1,45 @@
+---
+title: "Orange Yield Empirical Model"
+author: "Hannah Garcia & Haley Grant"
+date: "5/11/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# upload packages
+library(tidyverse)
+library(ggplot2)
+library(lubridate)
+library(patchwork)
+```
+
+```{r}
+# read in function 
+source("orange_yield.R")
+```
+
+```{r}
+# Read in data #1
+
+# Tidy data for function
+```
+
+
+```{r}
+# Read in data #2
+
+# Tidy data for function
+```
+
+
+```{r}
+# Read in data #3
+
+# Tidy data for function
+```
+
+
