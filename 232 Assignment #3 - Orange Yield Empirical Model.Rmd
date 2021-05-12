@@ -15,6 +15,7 @@ library(tidyverse)
 library(ggplot2)
 library(lubridate)
 library(patchwork)
+library(janitor)
 ```
 
 ```{r}
@@ -23,23 +24,40 @@ source("orange_yield.R")
 ```
 
 ```{r}
-# Read in data #1
+# read in data
 
-# Tidy data for function
-```
+all_climate <- read.csv("2578042.csv") # this data set contains data from three stations: Wiley Ridge CA, Oxnard CA, and Oxnard Weather Forecast Office, CA. All of these locations are in the general Oxnard area, which is an important agricultural region. Oranges are known to grow here or in the surrounding areas. 
 
+# tidy data for function
 
-```{r}
-# Read in data #2
+all_climate_tidy <- all_climate %>% 
+  clean_names() # all three locations combined, general oxnard area
 
-# Tidy data for function
-```
+max_temp <- all_climate_tidy %>% 
+  select(date, tmax) # we don't need max temp for model
 
+min_temp <- all_climate_tidy %>% 
+  select(date, tmin) %>% # we need min temp for December from year before
+  drop_na() %>% 
+  group_by(date) %>%# average tmin for repeated dates
+  summarize(tmin = mean(tmin)) %>% 
+  mutate(month = month(date)) %>% 
+  filter(month == "12") %>% # filter only the month of december
+  mutate(year = year(date)) %>% 
+  group_by(year) %>% 
+  summarize(tmin_december = mean(tmin))
 
-```{r}
-# Read in data #3
+precip <- all_climate_tidy %>% 
+  select(date, prcp) %>% # we need precip for May  
+  drop_na() %>% 
+  group_by(date) %>%# average precip for repeated dates
+  summarize(prcp = mean(prcp)) %>% 
+  mutate(month = month(date)) %>% 
+  filter(month == "5") %>% # filter only the month of may
+  mutate(year = year(date)) %>% 
+  group_by(year) %>% 
+  summarize(prcp_may = mean(prcp))
 
-# Tidy data for function
 ```
 
 
