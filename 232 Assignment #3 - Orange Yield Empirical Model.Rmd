@@ -16,6 +16,8 @@ library(ggplot2)
 library(lubridate)
 library(patchwork)
 library(janitor)
+library(ncdf4)
+library(chron)
 ```
 
 ```{r}
@@ -56,8 +58,81 @@ precip <- all_climate_tidy %>%
   filter(month == "5") %>% # filter only the month of may
   mutate(year = year(date)) %>% 
   group_by(year) %>% 
-  summarize(prcp_may = mean(prcp))
+  summarize(prcp_may = mean(prcp)) %>% 
+  slice(2:20) # remove first year so we only use current year for precip and previous year for temp
 
 ```
 
+```{r}
+# test the model
+
+result <- orange_anomaly(precip = precip$prcp_may, min_temp = min_temp$tmin_december)
+head(result)
+
+```
+
+
+
+```{r}
+# filename for data
+ncname20th <- "b.e11.B20TRC5CNBDRD.f09_g16.102.cam.h0.TS.199001-200512"  
+ncfname20th <- paste(ncname20th, ".nc", sep="")
+ncname21st <- "b.e11.BRCP85C5CNBDRD.f09_g16.102.cam.h0.TS.208501-210012"  
+ncfname21st <- paste(ncname21st, ".nc", sep="")
+dname <- "TS"  # this is the name of the variable you want to look at
+
+ncin <- nc_open(ncfname20th)
+ncin21st <- nc_open(ncfname21st)
+
+lon <- ncvar_get(ncin,"lon")
+nlon <- dim(lon)
+lat <- ncvar_get(ncin,"lat")
+nlat <- dim(lat)
+
+# Time coordinate for 20th century part of run
+time20th <- ncvar_get(ncin,"time")
+tunits20th <- ncatt_get(ncin,"time","units")
+origin="1/15/1990"
+enddate="12/15/2005"
+rtime20th <- seq.dates(origin, enddate, by="months")
+
+# Time coordinate for 21st century part of run
+origin="1/15/2085"
+enddate="12/15/2100"
+rtime21st <- seq.dates(origin, enddate, by="months")
+```
+
+
+
+```{r}
+TS20th <- ncvar_get(ncin, "TS")-273.15
+TS21st <- ncvar_get(ncin21st, "TS")-273.15
+
+lats=which(lat >= 32 & lat <= 35)
+lons=which(lon >= 241 & lon <= 243)
+
+# Regional minimum temperature
+tsmin20th <- apply(TS20th[lons,lats,],3,min)
+tsmin21st <- apply(TS21st[lons,lats,],3,min)
+
+# Make data frame, store the month of year in the data frame along with temperature information
+clim20th <- data.frame(time=rtime20th, tsmin=tsmin20th)
+clim20th$season = month(rtime20th)
+clim21st <- data.frame(time=rtime21st, tsmin=tsmin21st)
+clim21st$season = month(rtime21st)
+
+# Get December values only for minimum temperature
+decclim20th = subset(clim20th, clim20th$season==12)
+decclim20th$dt = unique(year(rtime20th))
+decclim21st = subset(clim21st, clim21st$season==12)
+decclim21st$dt = unique(year(rtime21st))
+
+# Apply empirical model: assume no change in efficiency below 15C, -1%/degree C above
+fac20=ifelse(decclim20th$tsmin-15 < 0,0,(decclim20th$tsmin-15)*-0.01)+1
+fac21=ifelse(decclim21st$tsmin-15 < 0,0,(decclim21st$tsmin-15)*-0.01)+1
+
+# Effect of climate change = ratio of efficiency factors for 21st, 20th century periods
+ccfac=mean(fac21)/mean(fac20)
+print(ccfac)
+```
 
