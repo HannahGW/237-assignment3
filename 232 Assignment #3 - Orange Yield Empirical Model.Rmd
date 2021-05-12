@@ -11,6 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r}
 # upload packages
+library(raster)
 library(tidyverse)
 library(ggplot2)
 library(lubridate)
@@ -18,6 +19,9 @@ library(patchwork)
 library(janitor)
 library(ncdf4)
 library(chron)
+library(rgdal)
+library(sf)
+library(here)
 ```
 
 ```{r}
@@ -134,5 +138,41 @@ fac21=ifelse(decclim21st$tsmin-15 < 0,0,(decclim21st$tsmin-15)*-0.01)+1
 # Effect of climate change = ratio of efficiency factors for 21st, 20th century periods
 ccfac=mean(fac21)/mean(fac20)
 print(ccfac)
+```
+
+## Read in Cal-Adapt Data
+```{r}
+require(raster)
+library(here)
+library(dplyr)
+
+## ------------------------------------------------------------------------------------
+# Precip: read in raster files and convert to points
+precip <- list.files(path = here("caladapt_data", "precip"), full.names = TRUE)
+
+prcp_raster <- raster::stack(precip) 
+
+prcp_df <- raster::rasterToPoints(prcp_raster) %>% 
+  as.data.frame()
+
+# remove first part of the column names so it is just the date
+names(prcp_df) = gsub(pattern = "prcp_flx_ccsm3a2bcsd_", replacement = "", x = names(prcp_df))
+
+# next step is to only keep May precip. UGH this'll be hard (need some time to figure this out)
+# precip_tidy <- prcp_df %>% 
+#   select(prcp_df, dplyr::contains("05")) - didn't work. I wonder if it's ok to get rid of the  x & y? we're not doing spatial?
+
+## ---------------------------------------------------------------------------------------
+# Tmin
+tmin <- list.files(path = here("caladapt_data", "tmin"), full.names = TRUE)
+
+tmin_raster <- raster::stack(tmin) 
+
+tmin_df <- raster::rasterToPoints(tmin_raster) %>% 
+  as.data.frame()
+
+names(tmin_df) = gsub(pattern = "tmin_inf_ccsm3a2bcsd_", replacement = "", x = names(tmin_df))
+
+# Filter for just December  
 ```
 
