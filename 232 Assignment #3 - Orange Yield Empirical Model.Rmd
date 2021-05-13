@@ -20,7 +20,6 @@ library(janitor)
 library(ncdf4)
 library(chron)
 library(rgdal)
-library(sf)
 library(here)
 ```
 
@@ -63,7 +62,12 @@ precip <- all_climate_tidy %>%
   mutate(year = year(date)) %>% 
   group_by(year) %>% 
   summarize(prcp_may = mean(prcp)) %>% 
-  slice(2:20) # remove first year so we only use current year for precip and previous year for temp
+  slice(-20) # remove the last year so the dfs match up
+  
+# slice(2:20) # remove first year so we only use current year for precip and previous year for temp
+
+# Combine dfs
+final_df <- merge(precip, min_temp, by = year) #ugh can't get this to work..
 
 ```
 
@@ -72,6 +76,12 @@ precip <- all_climate_tidy %>%
 
 result <- orange_anomaly(precip = precip$prcp_may, min_temp = min_temp$tmin_december)
 head(result)
+view(result)
+
+# make dataframe
+# orange_df = tibble(year = result[,1], anomaly= result[,2])
+
+# graph to see what it looks like
 
 ```
 
@@ -140,7 +150,7 @@ ccfac=mean(fac21)/mean(fac20)
 print(ccfac)
 ```
 
-## Read in Cal-Adapt Data
+## Read in Cal-Adapt Data (to-delete)
 ```{r}
 require(raster)
 library(here)
@@ -158,9 +168,20 @@ prcp_df <- raster::rasterToPoints(prcp_raster) %>%
 # remove first part of the column names so it is just the date
 names(prcp_df) = gsub(pattern = "prcp_flx_ccsm3a2bcsd_", replacement = "", x = names(prcp_df))
 
-# next step is to only keep May precip. UGH this'll be hard (need some time to figure this out)
-# precip_tidy <- prcp_df %>% 
-#   select(prcp_df, dplyr::contains("05")) - didn't work. I wonder if it's ok to get rid of the  x & y? we're not doing spatial?
+# Filter for x and y coordinates in ventura area
+prcp_tidy <- prcp_df %>% 
+  filter(between(x, -120, -119)) %>% 
+  filter(between(y, 34, 35)) #49,
+
+prcp_one_location <- prcp_tidy %>% 
+  filter(x == -119.9375) %>% # just chose one location because we do not need 49 points..
+  select(dplyr::contains("05")) %>% 
+  pivot_longer(cols = 3:33,
+               names_to = "year",
+               values_to = "value") 
+
+prcp_one_location <- prcp_one_location[ -c(1:2) ] # got rid of x and y because we don't need them
+
 
 ## ---------------------------------------------------------------------------------------
 # Tmin
@@ -173,6 +194,90 @@ tmin_df <- raster::rasterToPoints(tmin_raster) %>%
 
 names(tmin_df) = gsub(pattern = "tmin_inf_ccsm3a2bcsd_", replacement = "", x = names(tmin_df))
 
-# Filter for just December  
+# Filter for Ventura area (roughly)
+tmin_tidy <- tmin_df %>% 
+  filter(between(x, -120, -119)) %>% 
+  filter(between(y, 34, 35)) #49
+
+tmin_one_location <- tmin_tidy %>% 
+  filter(x == -119.9375) %>% # just chose one location because we do not need 49 points..
+  select(dplyr::contains("12")) %>% 
+  pivot_longer(cols = 3:30,
+               names_to = "year",
+               values_to = "value") 
+
+tmin_one_location <- tmin_one_location[ -c(1:2) ]
+```
+
+### CalAdapt Data: read in data and tidy
+```{r}
+require(raster)
+library(here)
+library(dplyr)
+
+## ------------------------------------------------------------------------------------
+# Precip: read in raster files and convert to points
+precip <- list.files(path = here("caladapt_data", "precip"), full.names = TRUE)
+
+prcp_raster <- raster::stack(precip) 
+
+prcp_df <- raster::rasterToPoints(prcp_raster) %>% 
+  as.data.frame()
+
+# remove first part of the column names so it is just the date
+names(prcp_df) = gsub(pattern = "prcp_flx_ccsm3a2bcsd_", replacement = "", x = names(prcp_df))
+
+## ------------------------------------------------------------------------------------
+# Ventura coordinates are: 34.3705° N, 119.1391° W (we'll use -119.9375, 34.9375)
+prcp_tidy <- prcp_df %>% 
+  filter(between(x, -120, -119)) %>% 
+  filter(between(y, 34, 35)
+
+prcp_select <- prcp_tidy %>% 
+  filter(x == -119.9375, y == 34.9375) %>% 
+  pivot_longer(cols = starts_with("2"),
+               names_to = "date",
+               values_to = "prcp") %>% 
+  mutate(date=ymd(date)) %>% 
+  mutate(month = month(date)) %>% 
+  filter(month==05) %>% 
+  mutate(year=year(date))
+
+prcp_select <- prcp_select[-c(1:4)]
+
+prcp_final <- prcp_select %>% 
+  select(year, everything())
+
+prcp_final <- prcp_final[-c(3)] # final dataframe for precip for month of may for every year
+
+## -----------------------------------------------------
+# tmin
+tmin <- list.files(path = here("caladapt_data", "tmin"), full.names = TRUE)
+
+tmin_raster <- raster::stack(tmin) 
+
+tmin_df <- raster::rasterToPoints(tmin_raster) %>% 
+  as.data.frame()
+
+names(tmin_df) = gsub(pattern = "tmin_inf_ccsm3a2bcsd_", replacement = "", x = names(tmin_df))
+
+tmin_tidy <- tmin_df %>% 
+  filter(between(x, -120, -119)) %>% 
+  filter(between(y, 34, 35))
+
+tmin_select <- tmin_tidy %>% 
+  filter(x == -119.9375, y == 34.9375) %>% 
+  pivot_longer(cols = starts_with("2"),
+               names_to = "date",
+               values_to = "tmin") %>% 
+  mutate(date=ymd(date)) %>% 
+  mutate(month = month(date)) %>% 
+  filter(month==12) %>% 
+  mutate(year=year(date))
+
+tmin_select <- tmin_select[-c(1:3, 5)]
+
+tmin_final <- tmin_select %>% 
+  select(year, everything()) # final dataframe for precip for month of december for every year
 ```
 
