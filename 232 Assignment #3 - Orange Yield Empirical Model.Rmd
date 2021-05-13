@@ -6,11 +6,13 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE,
+                      warning = FALSE,
+                      message = FALSE)
 ```
 
-```{r}
 # upload packages
+```{r}
 library(raster)
 library(tidyverse)
 library(ggplot2)
@@ -23,14 +25,13 @@ library(rgdal)
 library(here)
 ```
 
-```{r}
 # read in function 
+```{r}
 source("orange_yield.R")
 ```
 
-```{r}
 # read in data
-
+```{r}
 all_climate <- read.csv("2578042.csv") # this data set contains data from three stations: Wiley Ridge CA, Oxnard CA, and Oxnard Weather Forecast Office, CA. All of these locations are in the general Oxnard area, which is an important agricultural region. Oranges are known to grow here or in the surrounding areas. 
 
 # tidy data for function
@@ -38,118 +39,74 @@ all_climate <- read.csv("2578042.csv") # this data set contains data from three 
 all_climate_tidy <- all_climate %>% 
   clean_names() # all three locations combined, general oxnard area
 
-max_temp <- all_climate_tidy %>% 
-  select(date, tmax) # we don't need max temp for model
+# max_temp <- all_climate_tidy %>% 
+#   select(date, tmax) # we don't need max temp for model
 
-min_temp <- all_climate_tidy %>% 
-  select(date, tmin) %>% # we need min temp for December from year before
-  drop_na() %>% 
-  group_by(date) %>%# average tmin for repeated dates
-  summarize(tmin = mean(tmin)) %>% 
-  mutate(month = month(date)) %>% 
+min_temp <- all_climate_tidy %>% # units are degrees fahrenheit
+  select(date, tmin) %>%# we need min temp for December from year before
+  group_by(date) %>% # average tmin for repeated dates
+  summarize(tmin = mean(tmin, na.rm = TRUE)) %>% 
+  mutate(month = month(date)) %>%
   filter(month == "12") %>% # filter only the month of december
-  mutate(year = year(date)) %>% 
+  mutate(year = year(date)) %>%  
   group_by(year) %>% 
   summarize(tmin_december = mean(tmin))
 
-precip <- all_climate_tidy %>% 
+precip <- all_climate_tidy %>% # units are inches
   select(date, prcp) %>% # we need precip for May  
-  drop_na() %>% 
-  group_by(date) %>%# average precip for repeated dates
-  summarize(prcp = mean(prcp)) %>% 
-  mutate(month = month(date)) %>% 
+  group_by(date) %>% # average precip for repeated dates
+  mutate(month = month(date)) %>%  
   filter(month == "5") %>% # filter only the month of may
   mutate(year = year(date)) %>% 
   group_by(year) %>% 
-  summarize(prcp_may = mean(prcp)) %>% 
-  slice(-20) # remove the last year so the dfs match up
-  
-# slice(2:20) # remove first year so we only use current year for precip and previous year for temp
+  summarize(prcp_may = sum(prcp))
 
 # Combine dfs
-final_df <- merge(precip, min_temp, by = year) #ugh can't get this to work..
-
+final_historical <- full_join(min_temp, precip) #ugh can't get this to work..
 ```
 
+# run the model with historical data and graph results
 ```{r}
-# test the model
+result_historical <- orange_anomaly(precip = final_historical$prcp_may, min_temp = final_historical$tmin_december)
+result_historical
 
-result <- orange_anomaly(precip = precip$prcp_may, min_temp = min_temp$tmin_december)
-head(result)
-view(result)
-
-# make dataframe
-# orange_df = tibble(year = result[,1], anomaly= result[,2])
+end_historical <- data.frame(final_historical, result_historical)
 
 # graph to see what it looks like
 
+a <- ggplot(end_historical, aes(x = year, y = tmin_december)) +
+  geom_point() +
+  stat_smooth(method="lm", col="purple")
+
+b <- ggplot(end_historical, aes(x = year, y = prcp_may)) +
+  geom_point() +
+  stat_smooth(method="lm", col="green")
+
+c <- ggplot(end_historical, aes(x = year, y = result_historical)) +
+  geom_point() +
+  stat_smooth(method="lm", col="blue")
+
+historical_plot <- (c | (a / b)) + 
+  plot_layout(guides = 'collect', widths = c(3.5,1.5)) +
+  plot_annotation(title = "Historical trend of orange yield anomaly")
+historical_plot
+  
+ggsave("historical_plot.png")
+
+d <- ggplot(end_historical, aes(x = prcp_may, y = result_historical)) +
+  geom_point() +
+  stat_smooth(method="lm", col="red")
+
+e <- ggplot(end_historical, aes(x = tmin_december, y = result_historical)) +
+  geom_point() +
+  stat_smooth(method="lm", col="orange")
+
+historical_effect_plot <- d + e +
+  plot_annotation(title = "Effect of temperature and precipitation on orange yield anomaly")
+historical_effect_plot
+
+ggsave("historical_effect_plot.png")
 ```
-
-
-
-```{r}
-# filename for data
-ncname20th <- "b.e11.B20TRC5CNBDRD.f09_g16.102.cam.h0.TS.199001-200512"  
-ncfname20th <- paste(ncname20th, ".nc", sep="")
-ncname21st <- "b.e11.BRCP85C5CNBDRD.f09_g16.102.cam.h0.TS.208501-210012"  
-ncfname21st <- paste(ncname21st, ".nc", sep="")
-dname <- "TS"  # this is the name of the variable you want to look at
-
-ncin <- nc_open(ncfname20th)
-ncin21st <- nc_open(ncfname21st)
-
-lon <- ncvar_get(ncin,"lon")
-nlon <- dim(lon)
-lat <- ncvar_get(ncin,"lat")
-nlat <- dim(lat)
-
-# Time coordinate for 20th century part of run
-time20th <- ncvar_get(ncin,"time")
-tunits20th <- ncatt_get(ncin,"time","units")
-origin="1/15/1990"
-enddate="12/15/2005"
-rtime20th <- seq.dates(origin, enddate, by="months")
-
-# Time coordinate for 21st century part of run
-origin="1/15/2085"
-enddate="12/15/2100"
-rtime21st <- seq.dates(origin, enddate, by="months")
-```
-
-
-
-```{r}
-TS20th <- ncvar_get(ncin, "TS")-273.15
-TS21st <- ncvar_get(ncin21st, "TS")-273.15
-
-lats=which(lat >= 32 & lat <= 35)
-lons=which(lon >= 241 & lon <= 243)
-
-# Regional minimum temperature
-tsmin20th <- apply(TS20th[lons,lats,],3,min)
-tsmin21st <- apply(TS21st[lons,lats,],3,min)
-
-# Make data frame, store the month of year in the data frame along with temperature information
-clim20th <- data.frame(time=rtime20th, tsmin=tsmin20th)
-clim20th$season = month(rtime20th)
-clim21st <- data.frame(time=rtime21st, tsmin=tsmin21st)
-clim21st$season = month(rtime21st)
-
-# Get December values only for minimum temperature
-decclim20th = subset(clim20th, clim20th$season==12)
-decclim20th$dt = unique(year(rtime20th))
-decclim21st = subset(clim21st, clim21st$season==12)
-decclim21st$dt = unique(year(rtime21st))
-
-# Apply empirical model: assume no change in efficiency below 15C, -1%/degree C above
-fac20=ifelse(decclim20th$tsmin-15 < 0,0,(decclim20th$tsmin-15)*-0.01)+1
-fac21=ifelse(decclim21st$tsmin-15 < 0,0,(decclim21st$tsmin-15)*-0.01)+1
-
-# Effect of climate change = ratio of efficiency factors for 21st, 20th century periods
-ccfac=mean(fac21)/mean(fac20)
-print(ccfac)
-```
-
 
 ### CalAdapt Data: read in data and tidy
 ```{r}
@@ -185,12 +142,14 @@ prcp_select <- prcp_tidy %>%
   filter(month==05) %>% 
   mutate(year=year(date))
 
-prcp_select <- prcp_select[-c(1:3,5)]
+prcp_select <- prcp_select[-c(1:3)]
 
 prcp_final <- prcp_select %>% 
-  select(year, everything()) # final dataframe for precip for month of may for every year
+  select(year, everything())
 
-write.csv(x=prcp_final, file ="caladapt_precip_final.csv")
+prcp_final <- prcp_final[-c(3)] # final dataframe for precip for month of may for every year
+
+prcp_final <- prcp_final[-1, ]
 
 ## -----------------------------------------------------
 # tmin
@@ -222,6 +181,20 @@ tmin_select <- tmin_select[-c(1:3, 5)]
 tmin_final <- tmin_select %>% 
   select(year, everything()) # final dataframe for precip for month of december for every year
 
-write.csv(x=tmin_final, file ="caladapt_tmin_final.csv")
+tmin_final <- tmin_final[-30, ]
+```
+
+# run model and plot results
+```{r}
+result_future <- orange_anomaly(precip = prcp_final$prcp, min_temp = tmin_final$tmin)
+
+combine <- merge(tmin_final, prcp_final)
+
+end <- data.frame(result, combine)
+
+options(scipen = 999)
+
+ggplot(end, aes(x = tmin, y = result)) +
+  geom_point()
 ```
 
