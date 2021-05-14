@@ -78,22 +78,29 @@ end_historical <- data.frame(final_historical, result_historical)
 
 a <- ggplot(end_historical, aes(x = year, y = tmin_december)) +
   geom_point() +
-  stat_smooth(method="lm", col="purple")
+  stat_smooth(method="lm", col="purple") +
+  labs(x="Year", y="December Tmin")
 
 b <- ggplot(end_historical, aes(x = year, y = prcp_may)) +
   geom_point() +
-  stat_smooth(method="lm", col="green")
+  stat_smooth(method="lm", col="green") +
+  labs(x="Year", y="May Precip")
 
 c <- ggplot(end_historical, aes(x = year, y = result_historical)) +
   geom_point() +
-  stat_smooth(method="lm", col="blue")
+  stat_smooth(method="lm", col="blue") +
+  labs(x="Year", y="Orange Yield Anomaly")
 
 historical_plot <- (c | (a / b)) + 
   plot_layout(guides = 'collect', widths = c(3.5,1.5)) +
-  plot_annotation(title = "Historical trend of orange yield anomaly")
-historical_plot
+  plot_annotation(title = "Historical trend of orange yield anomaly") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ggsave(here("figures", "historical_plot.png"),
+         height=5, width=7, units="in")
   
-ggsave("historical_plot.png")
+historical_plot
+
+## --------------------------------------------------------------------------
 
 d <- ggplot(end_historical, aes(x = prcp_may, y = result_historical)) +
   geom_point() +
@@ -107,10 +114,14 @@ historical_effect_plot <- d + e +
   plot_annotation(title = "Effect of temperature and precipitation on orange yield anomaly")
 historical_effect_plot
 
-ggsave("historical_effect_plot.png")
+# ggsave("historical_effect_plot.png")
 ```
 
-### CalAdapt Data: read in data and tidy
+# Future Climate Scenario 
+
+## A2 Emissions, CCSM3 Model
+
+### CalAdapt Data: read in data and tidy 
 ```{r}
 require(raster)
 library(here)
@@ -192,7 +203,7 @@ future_final <- full_join(prcp_final, tmin_final)
 
 ```
 
-# run model and plot results
+### run model and plot results - A2 CCSM3
 ```{r}
 result_future <- orange_anomaly(precip = future_final$prcp, min_temp = future_final$tmin)
 result_future
@@ -208,14 +219,136 @@ total_plot <- ggplot(end_total, aes(x = year, y = result_future)) +
   stat_smooth(method="lm", col="yellow")
 total_plot
 
-ggsave("total_plot.png")
+# ggsave("total_plot.png")
 
 # plots with outliers removed
 outlier_plot <- ggplot(end_outlier, aes(x = year, y = result_future)) +
   geom_point() +
-  stat_smooth(method="lm", col="purple")
+  stat_smooth(method="lm", col="purple") +
+  labs(x = "Year", y = "Orange Yield Anomaly",
+       title = "A2 Emissions, CCSM3 Model Projections") +
+  theme(plot.title = element_text(hjust = 0.5))
+  
 outlier_plot
 
-ggsave("outlier_plot.png")
+ggsave(here("figures", "a2_ccsm3_plot.png"),
+       height=5, width=7, units="in")
 ```
+## B1 Emissions, GFDL Model
+
+### Read in data & tidy
+```{r}
+require(raster)
+library(here)
+library(dplyr)
+
+## ------------------------------------------------------------------------------------
+# Precip: read in raster files and convert to points
+precip_b1 <- list.files(path = here("caladapt_data", "prcp_b2"), full.names = TRUE)
+
+prcp_b1_raster <- raster::stack(precip_b1) 
+
+prcp_b1_df <- raster::rasterToPoints(prcp_b1_raster) %>% 
+  as.data.frame()
+
+# remove first part of the column names so it is just the date
+names(prcp_b1_df) = gsub(pattern = "prcp_flx_gfdlb1bcsd_", replacement = "", x = names(prcp_b1_df))
+
+## ------------------------------------------------------------------------------------
+# Ventura coordinates are: 34.3705° N, 119.1391° W (we'll use -119.9375, 34.9375)
+prcp_b1_tidy <- prcp_b1_df %>% 
+  filter(between(x, -120, -119)) %>% 
+  filter(between(y, 34, 35))
+
+prcp_b1_select <- prcp_b1_tidy %>% 
+  filter(x == -119.9375, y == 34.9375) %>% 
+  pivot_longer(cols = starts_with("2"),
+               names_to = "date",
+               values_to = "prcp") %>% 
+  mutate(date=ymd(date)) %>% 
+  mutate(month = month(date)) %>% 
+  filter(month==05) %>% 
+  mutate(year=year(date))
+
+prcp_b1_select <- prcp_b1_select[-c(1:3,5)]
+
+prcp_b1_final <- prcp_b1_select %>% 
+  select(year, everything())
+
+# write.csv(prcp_b1_final, "caladapt_prcp_b1_final.csv")
+
+## -----------------------------------------------------
+# tmin
+tmin_b1 <- list.files(path = here("caladapt_data", "tmin_b2"), full.names = TRUE)
+
+tmin_b1_raster <- raster::stack(tmin_b1) 
+
+tmin_b1_df <- raster::rasterToPoints(tmin_b1_raster) %>% 
+  as.data.frame()
+
+names(tmin_b1_df) = gsub(pattern = "tmin_inf_gfdlb1bcsd_", replacement = "", x = names(tmin_b1_df))
+
+tmin_b1_tidy <- tmin_b1_df %>% 
+  filter(between(x, -120, -119)) %>% 
+  filter(between(y, 34, 35))
+
+tmin_b1_select <- tmin_b1_tidy %>% 
+  filter(x == -119.9375, y == 34.9375) %>% 
+  pivot_longer(cols = starts_with("2"),
+               names_to = "date",
+               values_to = "tmin") %>% 
+  mutate(date=ymd(date)) %>% 
+  mutate(month = month(date)) %>% 
+  filter(month==12) %>% 
+  mutate(year=year(date))
+
+tmin_b1_select <- tmin_b1_select[-c(1:3, 5)]
+
+tmin_b1_final <- tmin_b1_select %>% 
+  select(year, everything()) # final dataframe for precip for month of december for every year
+
+write.csv(tmin_b1_final, "caladapt_tmin_b1_final.csv")
+
+## -----------------------------------------------------
+# combine climate data into one data frame
+
+future_final_b1 <- full_join(prcp_b1_final, tmin_b1_final)
+```
+
+### run model and plot results - B1 GFDL
+```{r}
+result_future_b1 <- orange_anomaly(precip = future_final_b1$prcp, min_temp = future_final_b1$tmin)
+result_future_b1
+
+end_total_b1 <- data.frame(future_final_b1, result_future_b1) 
+
+end_outlier_b1 <- end_total_b1 %>%  
+  filter(result_future > -20) # delete outliers
+
+# plots with all points
+total_plot_b1 <- ggplot(end_total_b1, aes(x = year, y = result_future_b1)) +
+  geom_point() +
+  stat_smooth(method="lm", col="yellow")
+total_plot_b1
+
+# ggsave("total_plot.png")
+
+# plots with outliers removed
+outlier_plot_b1 <- ggplot(end_outlier_b1, aes(x = year, y = result_future_b1)) +
+  geom_point() +
+  stat_smooth(method="lm", col="purple") +
+  labs(x = "Year", y = "Orange Yield Anomaly",
+       title = "B1 Emissions, GFDL Model Projections") +
+  theme(plot.title = element_text(hjust = 0.5)) 
+  # ggsave(here("figures", "b1_gfdl_plot.png"),
+  #      height=5, width=7, units="in")
+  
+# outlier_plot_b1
+ 
+```
+
+
+
+
+
 
