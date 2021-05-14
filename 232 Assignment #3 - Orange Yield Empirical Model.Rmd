@@ -56,15 +56,20 @@ min_temp <- all_climate_tidy %>% # units are degrees fahrenheit
 
 precip <- all_climate_tidy %>% # units are inches
   select(date, prcp) %>% # we need precip for May  
-  group_by(date) %>% # average precip for repeated dates
-  mutate(month = month(date)) %>%  
+  group_by(date) %>%
+  summarize(prcp = mean(prcp, na.rm = TRUE)) %>%  # average precip for repeated dates
+  # drop_na() %>% 
+  mutate(month = month(date)) %>%    
   filter(month == "5") %>% # filter only the month of may
-  mutate(year = year(date)) %>% 
+  mutate(year = year(date)) %>%  
   group_by(year) %>% 
   summarize(prcp_may = sum(prcp))
+  
+precip <- precip[-c(10,21), ]
 
 # Combine dfs
-final_historical <- full_join(min_temp, precip) #ugh can't get this to work..
+final_historical <- full_join(min_temp, precip) %>% 
+  mutate(tmin_december = ((tmin_december - 32)*(5/9))) # change units
 ```
 
 # run the model with historical data and graph results
@@ -114,7 +119,7 @@ historical_effect_plot <- d + e +
   plot_annotation(title = "Effect of temperature and precipitation on orange yield anomaly")
 historical_effect_plot
 
-# ggsave("historical_effect_plot.png")
+ggsave("historical_effect_plot.png")
 ```
 
 # Future Climate Scenario 
@@ -229,7 +234,7 @@ outlier_plot <- ggplot(end_outlier, aes(x = year, y = result_future)) +
        title = "A2 Emissions, CCSM3 Model Projections") +
   theme(plot.title = element_text(hjust = 0.5))
   
-outlier_plot
+ outlier_plot
 
 ggsave(here("figures", "a2_ccsm3_plot.png"),
        height=5, width=7, units="in")
@@ -323,7 +328,7 @@ result_future_b1
 end_total_b1 <- data.frame(future_final_b1, result_future_b1) 
 
 end_outlier_b1 <- end_total_b1 %>%  
-  filter(result_future > -20) # delete outliers
+  filter(result_future_b1 > -20) # delete outliers
 
 # plots with all points
 total_plot_b1 <- ggplot(end_total_b1, aes(x = year, y = result_future_b1)) +
@@ -339,11 +344,11 @@ outlier_plot_b1 <- ggplot(end_outlier_b1, aes(x = year, y = result_future_b1)) +
   stat_smooth(method="lm", col="purple") +
   labs(x = "Year", y = "Orange Yield Anomaly",
        title = "B1 Emissions, GFDL Model Projections") +
-  theme(plot.title = element_text(hjust = 0.5)) 
-  # ggsave(here("figures", "b1_gfdl_plot.png"),
-  #      height=5, width=7, units="in")
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ggsave(here("figures", "b1_gfdl_plot.png"),
+       height=5, width=7, units="in")
   
-# outlier_plot_b1
+# ggsave("outlier_plot_b1.png")
  
 ```
 
